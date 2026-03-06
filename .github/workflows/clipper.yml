@@ -4,9 +4,15 @@ on:
   issues:
     types: [closed]
 
+concurrency:
+  group: clipper
+  cancel-in-progress: false
+
 jobs:
   capture:
-    if: contains(github.event.issue.labels.*.name, 'pending-capture')
+    if: |
+      contains(github.event.issue.labels.*.name, 'pending-capture') &&
+      github.event.issue.author_association != 'NONE'
     runs-on: ubuntu-latest
     permissions:
       contents: write
