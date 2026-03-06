@@ -9,7 +9,7 @@ import sys
 import time
 import requests
 import yaml
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -50,8 +50,10 @@ def _save_usage(data: dict):
         import fcntl
         with open(USAGE_PATH, 'w') as f:
             fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-            json.dump(data, f, indent=2)
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            try:
+                json.dump(data, f, indent=2)
+            finally:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
     except ImportError:
         # fcntl unavailable on Windows — write without locking
         with open(USAGE_PATH, 'w') as f:
@@ -155,7 +157,9 @@ class WebDigest:
             try:
                 from dateutil.parser import parse
                 dt = parse(pub_time)
-                diff = datetime.now(dt.tzinfo) - dt
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                diff = datetime.now(timezone.utc) - dt
                 if diff < timedelta(hours=6): return 10
                 if diff < timedelta(days=1): return 9
                 if diff < timedelta(days=3): return 8
@@ -194,8 +198,8 @@ class WebDigest:
                     return resp.json().get('data', {}).get('content', '')[:3000]
                 except Exception:
                     return resp.text[:3000]
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"  [Jina] Error: {e}")
         return ""
 
     def _search_brave(self, query: str) -> list:
@@ -218,8 +222,8 @@ class WebDigest:
                             'base_score': 10, 'provider': 'brave',
                             'published_time': r.get('published_time')
                         })
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"  [Brave News] Error: {e}")
 
         try:
             _track_api_call("brave")
@@ -236,8 +240,8 @@ class WebDigest:
                         'base_score': 5 if "site:" not in query else 8,
                         'provider': 'brave'
                     })
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"  [Brave Web] Error: {e}")
         return results
 
     def _search_tavily(self, query: str, include_domains: list = None) -> list:
@@ -259,8 +263,8 @@ class WebDigest:
                     'base_score': 8, 'provider': 'tavily',
                     'tavily_score': r.get('score', 0.5)
                 } for r in resp.json().get("results", [])]
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"  [Tavily] Error: {e}")
         return []
 
     def search_wide(self, query: str, is_social=False) -> list:
@@ -323,7 +327,8 @@ Search results:
                 model='gemini-2.0-flash', contents=prompt,
                 config=types.GenerateContentConfig(response_mime_type="application/json"))
             analysis_dict = {item['id']: item for item in json.loads(resp.text)}
-        except Exception:
+        except Exception as e:
+            print(f"  [Gemini] Scoring error: {e}")
             analysis_dict = {}
 
         sub_queries = [q.strip().lower() for q in full_query.split('|') if q.strip()]
