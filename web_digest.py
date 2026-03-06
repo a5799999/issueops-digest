@@ -397,7 +397,7 @@ Search results:
 
         # Interleaving (round-robin merge for fair exposure)
         raw_results = []
-        max_len = max(len(lst) for lst in results_per_query) if results_per_query else 0
+        max_len = max((len(lst) for lst in results_per_query), default=0) if results_per_query else 0
         for i in range(max_len):
             for q_res in results_per_query:
                 if i < len(q_res):

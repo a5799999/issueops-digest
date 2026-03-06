@@ -61,7 +61,23 @@ jobs:
           os.makedirs("captures", exist_ok=True)
           capture_count = 0
 
+          # SSRF protection: skip private/internal URLs
+          import ipaddress
+          from urllib.parse import urlparse as _urlparse
+          def _is_safe_url(u):
+              try:
+                  host = _urlparse(u).hostname
+                  if not host:
+                      return False
+                  ip = ipaddress.ip_address(host)
+                  return ip.is_global
+              except ValueError:
+                  return True  # hostname (not IP) — allow
+
           for url in urls:
+              if not _is_safe_url(url):
+                  print(f"  Skipping private/internal URL: {url}")
+                  continue
               print(f"Processing: {url}")
               url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
 
