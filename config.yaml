@@ -38,8 +38,10 @@ social_domains:
   - reddit.com
 
 # API quota tracking (CLI mode only)
+# hard_limit_percent: refuse to run when usage exceeds this threshold
 quotas:
   brave_monthly: 1000
   tavily_monthly: 1000
   gemini_daily: 1500
   warn_at_percent: 80
+  hard_limit_percent: 100

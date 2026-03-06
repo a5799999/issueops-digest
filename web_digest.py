@@ -46,27 +46,66 @@ def _load_usage() -> dict:
     return {}
 
 def _save_usage(data: dict):
-    import fcntl
-    with open(USAGE_PATH, 'w') as f:
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-        json.dump(data, f, indent=2)
-        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    try:
+        import fcntl
+        with open(USAGE_PATH, 'w') as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            json.dump(data, f, indent=2)
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    except ImportError:
+        # fcntl unavailable on Windows — write without locking
+        with open(USAGE_PATH, 'w') as f:
+            json.dump(data, f, indent=2)
+
+def _get_usage_bucket(api_name: str) -> str:
+    """Return the time-based bucket key: daily for gemini, monthly for others."""
+    if api_name == "gemini":
+        return datetime.now().strftime("%Y-%m-%d")
+    return datetime.now().strftime("%Y-%m")
+
+def _get_current_usage(api_name: str) -> tuple:
+    """Return (count, limit) for the given API in its current bucket."""
+    quotas = CONFIG.get("quotas", {})
+    limit_key = f"{api_name}_monthly" if api_name != "gemini" else "gemini_daily"
+    limit = quotas.get(limit_key, 0)
+    data = _load_usage()
+    bucket = _get_usage_bucket(api_name)
+    count = data.get(bucket, {}).get(api_name, 0)
+    return count, limit
+
+def _check_quota_preflight():
+    """Pre-flight check: block execution if any API exceeds hard limit."""
+    quotas = CONFIG.get("quotas", {})
+    if not quotas:
+        return
+    hard_pct = quotas.get("hard_limit_percent", 100)
+    for api_name in ["brave", "tavily", "gemini"]:
+        count, limit = _get_current_usage(api_name)
+        if limit <= 0:
+            continue
+        pct = count / limit * 100
+        if pct >= hard_pct:
+            print(f"\033[91m⛔ {api_name}: {count}/{limit} ({pct:.0f}%) — quota exceeded, aborting.\033[0m")
+            print(f"\033[91m   Adjust 'hard_limit_percent' in config.yaml to override.\033[0m")
+            sys.exit(1)
+        elif pct >= 90:
+            print(f"\033[93m⚠️ {api_name}: {count}/{limit} ({pct:.0f}%) — approaching limit\033[0m")
 
 def _track_api_call(api_name: str):
     quotas = CONFIG.get("quotas", {})
     if not quotas:
         return
     data = _load_usage()
-    month = datetime.now().strftime("%Y-%m")
-    if month not in data:
-        data[month] = {}
-    data[month][api_name] = data[month].get(api_name, 0) + 1
+    bucket = _get_usage_bucket(api_name)
+    if bucket not in data:
+        data[bucket] = {}
+    data[bucket][api_name] = data[bucket].get(api_name, 0) + 1
 
     limit_key = f"{api_name}_monthly" if api_name != "gemini" else "gemini_daily"
     limit = quotas.get(limit_key, 0)
     warn_pct = quotas.get("warn_at_percent", 80)
 
-    count = data[month][api_name]
+    count = data[bucket][api_name]
     if limit > 0:
         pct = count / limit * 100
         if pct >= 95:
@@ -103,6 +142,8 @@ class WebDigest:
         if not self.gemini_key:
             print("Error: GEMINI_API_KEY not set. Check your .env file.")
             sys.exit(1)
+
+        _check_quota_preflight()
 
     def _extract_domain(self, url: str) -> str:
         from urllib.parse import urlparse

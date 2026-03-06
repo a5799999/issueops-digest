@@ -23,9 +23,21 @@ class GitHubIssueOutput:
             raise ValueError("GITHUB_REPO not set. Check your .env file. (e.g. your-username/issueops-digest)")
 
         self.api_url = f"https://api.github.com/repos/{self.repo}/issues"
+        self._headers = {
+            "Authorization": f"token {self.token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+
+    def _ensure_labels(self):
+        """Create required labels if they don't exist (idempotent)."""
+        url = f"https://api.github.com/repos/{self.repo}/labels"
+        for name, color in [("discovery", "0075ca"), ("pending-capture", "e4e669")]:
+            requests.post(url, json={"name": name, "color": color}, headers=self._headers)
+            # 201 = created, 422 = already exists — both are fine
 
     def publish(self, keywords: str, results: List[Dict]) -> str:
         """Create a discovery Issue with checkbox list."""
+        self._ensure_labels()
         today = datetime.now().strftime("%Y%m%d")
         title = f"🔍 Search Results: {keywords} - {today}"
 
@@ -46,12 +58,7 @@ class GitHubIssueOutput:
             "labels": ["discovery", "pending-capture"]
         }
 
-        headers = {
-            "Authorization": f"token {self.token}",
-            "Accept": "application/vnd.github.v3+json"
-        }
-
-        response = requests.post(self.api_url, json=payload, headers=headers)
+        response = requests.post(self.api_url, json=payload, headers=self._headers)
         if response.status_code == 201:
             url = response.json().get('html_url')
             print(f"\n✅ Issue created: {url}")

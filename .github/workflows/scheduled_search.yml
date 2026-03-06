@@ -34,7 +34,7 @@ jobs:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
         run: |
           python3 << 'PYEOF'
-          import yaml
+          import os, yaml
 
           with open("config.yaml", "r") as f:
               config = yaml.safe_load(f)
