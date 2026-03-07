@@ -1,6 +1,3 @@
-search:
-  engine: serper
-
 # issueops-digest configuration
 
 # Search topics for scheduled (cron) mode
