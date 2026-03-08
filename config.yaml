@@ -15,9 +15,9 @@ weight_profile: default
 # Domains that get bonus authority scores (0-15)
 # Higher score = more trusted source
 authority_domains:
-  bloomberg.com: 15
-  wsj.com: 15
-  reuters.com: 12
+  bloomberg.com: 5
+  wsj.com: 5
+  reuters.com: 4
   nikkei.com: 12
   technews.tw: 10
   bnext.com.tw: 8
